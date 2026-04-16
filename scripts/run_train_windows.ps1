@@ -3,7 +3,7 @@ param(
     [string]$Stage = "train",
     [int]$Fold = 0,
     [int]$Gpu = 0,
-    [string]$Config = "Camelyon/TransMIL.windows.yaml",
+    [string]$Config = "Camelyon/TransMIL.ibotvitbasecoadcamelyon16.windows.yaml",
     [string]$EnvName = "transmil"
 )
 

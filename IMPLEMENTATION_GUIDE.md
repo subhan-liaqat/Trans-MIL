@@ -72,3 +72,25 @@ When moving to Colab:
 - Mount Google Drive and point data paths to Drive if needed.
 
 The main goal is keeping path conventions unchanged so behavior matches your local baseline.
+
+## 6) Kaggle iBOTViTBaseCOADCamelyon16 Workflow
+
+If you use `forcewithme/ibotvitbasecoadcamelyon16`, run:
+
+```powershell
+.\scripts\prepare_ibotvitbasecoadcamelyon16_windows.ps1 -DatasetRoot "D:\path\to\ibotvitbasecoadcamelyon16"
+```
+
+This script:
+
+- Reads `.npy` feature files from the dataset root.
+- Converts them into TransMIL-ready `.pt` files in `IbotViTBaseCOADCamelyon16/pt_files/`.
+- Infers labels from folder names (`normal` -> 0, `tumor/metastasis` -> 1).
+- Creates `dataset_csv/ibotvitbasecoadcamelyon16/fold0.csv`.
+- Does not run CLAM patching because this Kaggle dataset already provides extracted features.
+
+Then train:
+
+```powershell
+.\scripts\run_train_windows.ps1 -Stage train -Fold 0 -Gpu 0 -Config Camelyon/TransMIL.ibotvitbasecoadcamelyon16.windows.yaml
+```
