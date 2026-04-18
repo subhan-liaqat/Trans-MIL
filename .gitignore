@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+logs/
+third_party/
+downloads/
+tmp/
+
+Camelyon16/
+*.ckpt
+*.tar.gz

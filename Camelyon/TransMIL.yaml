@@ -17,6 +17,7 @@ Data:
     dataset_name: camel_data
     data_shuffle: False
     data_dir: Camelyon16/pt_files/
+    feature_exts: ['.pt', '.npy']
     label_dir: dataset_csv/camelyon16/
     fold: 0
     nfold: 4
@@ -32,6 +33,7 @@ Data:
 Model:
     name: TransMIL
     n_classes: 2
+    in_dim: 1024
 
 
 Optimizer:

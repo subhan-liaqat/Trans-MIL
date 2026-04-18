@@ -64,7 +64,4 @@ def load_callbacks(cfg):
 import torch
 import torch.nn.functional as F
 def cross_entropy_torch(x, y):
-    x_softmax = [F.softmax(x[i]) for i in range(len(x))]
-    x_log = torch.tensor([torch.log(x_softmax[i][y[i]]) for i in range(len(y))])
-    loss = - torch.sum(x_log) / len(y)
-    return loss
+    return F.cross_entropy(x, y.long())

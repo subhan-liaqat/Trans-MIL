@@ -14,7 +14,23 @@ from utils.utils import cross_entropy_torch
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchmetrics
+from torchmetrics import MetricCollection
+from torchmetrics.classification import (
+    BinaryAUROC,
+    BinaryAccuracy,
+    BinaryCohenKappa,
+    BinaryF1Score,
+    BinaryPrecision,
+    BinaryRecall,
+    BinarySpecificity,
+    MulticlassAUROC,
+    MulticlassAccuracy,
+    MulticlassCohenKappa,
+    MulticlassF1Score,
+    MulticlassPrecision,
+    MulticlassRecall,
+    MulticlassSpecificity,
+)
 
 #---->
 import pytorch_lightning as pl
@@ -37,29 +53,25 @@ class  ModelInterface(pl.LightningModule):
         
         #---->Metrics
         if self.n_classes > 2: 
-            self.AUROC = torchmetrics.AUROC(num_classes = self.n_classes, average = 'macro')
-            metrics = torchmetrics.MetricCollection([torchmetrics.Accuracy(num_classes = self.n_classes,
-                                                                           average='micro'),
-                                                     torchmetrics.CohenKappa(num_classes = self.n_classes),
-                                                     torchmetrics.F1(num_classes = self.n_classes,
-                                                                     average = 'macro'),
-                                                     torchmetrics.Recall(average = 'macro',
-                                                                         num_classes = self.n_classes),
-                                                     torchmetrics.Precision(average = 'macro',
-                                                                            num_classes = self.n_classes),
-                                                     torchmetrics.Specificity(average = 'macro',
-                                                                            num_classes = self.n_classes)])
+            self.AUROC = MulticlassAUROC(num_classes=self.n_classes, average='macro')
+            metrics = MetricCollection({
+                'acc': MulticlassAccuracy(num_classes=self.n_classes, average='micro'),
+                'cohen_kappa': MulticlassCohenKappa(num_classes=self.n_classes),
+                'f1': MulticlassF1Score(num_classes=self.n_classes, average='macro'),
+                'recall': MulticlassRecall(num_classes=self.n_classes, average='macro'),
+                'precision': MulticlassPrecision(num_classes=self.n_classes, average='macro'),
+                'specificity': MulticlassSpecificity(num_classes=self.n_classes, average='macro'),
+            })
         else : 
-            self.AUROC = torchmetrics.AUROC(num_classes=2, average = 'macro')
-            metrics = torchmetrics.MetricCollection([torchmetrics.Accuracy(num_classes = 2,
-                                                                           average = 'micro'),
-                                                     torchmetrics.CohenKappa(num_classes = 2),
-                                                     torchmetrics.F1(num_classes = 2,
-                                                                     average = 'macro'),
-                                                     torchmetrics.Recall(average = 'macro',
-                                                                         num_classes = 2),
-                                                     torchmetrics.Precision(average = 'macro',
-                                                                            num_classes = 2)])
+            self.AUROC = BinaryAUROC()
+            metrics = MetricCollection({
+                'acc': BinaryAccuracy(),
+                'cohen_kappa': BinaryCohenKappa(),
+                'f1': BinaryF1Score(),
+                'recall': BinaryRecall(),
+                'precision': BinaryPrecision(),
+                'specificity': BinarySpecificity(),
+            })
         self.valid_metrics = metrics.clone(prefix = 'val_')
         self.test_metrics = metrics.clone(prefix = 'test_')
 
@@ -87,10 +99,7 @@ class  ModelInterface(pl.LightningModule):
         loss = self.loss(logits, label)
 
         #---->acc log
-        Y_hat = int(Y_hat)
-        Y = int(label)
-        self.data[Y]["count"] += 1
-        self.data[Y]["correct"] += (Y_hat == Y)
+        self._update_classwise_stats(Y_hat, label)
 
         return {'loss': loss} 
 
@@ -114,9 +123,7 @@ class  ModelInterface(pl.LightningModule):
 
 
         #---->acc log
-        Y = int(label)
-        self.data[Y]["count"] += 1
-        self.data[Y]["correct"] += (Y_hat.item() == Y)
+        self._update_classwise_stats(Y_hat, label)
 
         return {'logits' : logits, 'Y_prob' : Y_prob, 'Y_hat' : Y_hat, 'label' : label}
 
@@ -128,9 +135,11 @@ class  ModelInterface(pl.LightningModule):
         target = torch.stack([x['label'] for x in val_step_outputs], dim = 0)
         
         #---->
+        target = target.view(-1).long()
+        preds = max_probs.view(-1).long()
         self.log('val_loss', cross_entropy_torch(logits, target), prog_bar=True, on_epoch=True, logger=True)
-        self.log('auc', self.AUROC(probs, target.squeeze()), prog_bar=True, on_epoch=True, logger=True)
-        self.log_dict(self.valid_metrics(max_probs.squeeze() , target.squeeze()),
+        self.log('auc', self._compute_auc(probs, target), prog_bar=True, on_epoch=True, logger=True)
+        self.log_dict(self.valid_metrics(preds, target),
                           on_epoch = True, logger = True)
 
         #---->acc log
@@ -163,9 +172,7 @@ class  ModelInterface(pl.LightningModule):
         Y_hat = results_dict['Y_hat']
 
         #---->acc log
-        Y = int(label)
-        self.data[Y]["count"] += 1
-        self.data[Y]["correct"] += (Y_hat.item() == Y)
+        self._update_classwise_stats(Y_hat, label)
 
         return {'logits' : logits, 'Y_prob' : Y_prob, 'Y_hat' : Y_hat, 'label' : label}
 
@@ -175,8 +182,10 @@ class  ModelInterface(pl.LightningModule):
         target = torch.stack([x['label'] for x in output_results], dim = 0)
         
         #---->
-        auc = self.AUROC(probs, target.squeeze())
-        metrics = self.test_metrics(max_probs.squeeze() , target.squeeze())
+        target = target.view(-1).long()
+        preds = max_probs.view(-1).long()
+        auc = self._compute_auc(probs, target)
+        metrics = self.test_metrics(preds, target)
         metrics['auc'] = auc
         for keys, values in metrics.items():
             print(f'{keys} = {values}')
@@ -219,7 +228,10 @@ class  ModelInterface(pl.LightningModule):
             from self.hparams dictionary. You can also input any args
             to overwrite the corresponding value in self.hparams.
         """
-        class_args = inspect.getargspec(Model.__init__).args[1:]
+        class_args = [
+            name for name in inspect.signature(Model.__init__).parameters
+            if name != 'self'
+        ]
         inkeys = self.hparams.model.keys()
         args1 = {}
         for arg in class_args:
@@ -227,3 +239,19 @@ class  ModelInterface(pl.LightningModule):
                 args1[arg] = getattr(self.hparams.model, arg)
         args1.update(other_args)
         return Model(**args1)
+
+    def _compute_auc(self, probs, target):
+        if self.n_classes > 2:
+            return self.AUROC(probs, target)
+
+        positive_probs = probs[:, 1] if probs.ndim > 1 else probs
+        return self.AUROC(positive_probs, target)
+
+    def _update_classwise_stats(self, predictions, targets):
+        preds = predictions.detach().view(-1).cpu().tolist()
+        labels = targets.detach().view(-1).cpu().tolist()
+        for pred, label in zip(preds, labels):
+            label = int(label)
+            pred = int(pred)
+            self.data[label]["count"] += 1
+            self.data[label]["correct"] += int(pred == label)

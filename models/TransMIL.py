@@ -44,16 +44,16 @@ class PPEG(nn.Module):
 
 
 class TransMIL(nn.Module):
-    def __init__(self, n_classes):
+    def __init__(self, n_classes, in_dim=1024, hidden_dim=512):
         super(TransMIL, self).__init__()
-        self.pos_layer = PPEG(dim=512)
-        self._fc1 = nn.Sequential(nn.Linear(1024, 512), nn.ReLU())
-        self.cls_token = nn.Parameter(torch.randn(1, 1, 512))
+        self.pos_layer = PPEG(dim=hidden_dim)
+        self._fc1 = nn.Sequential(nn.Linear(in_dim, hidden_dim), nn.ReLU())
+        self.cls_token = nn.Parameter(torch.randn(1, 1, hidden_dim))
         self.n_classes = n_classes
-        self.layer1 = TransLayer(dim=512)
-        self.layer2 = TransLayer(dim=512)
-        self.norm = nn.LayerNorm(512)
-        self._fc2 = nn.Linear(512, self.n_classes)
+        self.layer1 = TransLayer(dim=hidden_dim)
+        self.layer2 = TransLayer(dim=hidden_dim)
+        self.norm = nn.LayerNorm(hidden_dim)
+        self._fc2 = nn.Linear(hidden_dim, self.n_classes)
 
 
     def forward(self, **kwargs):
@@ -70,7 +70,7 @@ class TransMIL(nn.Module):
 
         #---->cls_token
         B = h.shape[0]
-        cls_tokens = self.cls_token.expand(B, -1, -1).cuda()
+        cls_tokens = self.cls_token.expand(B, -1, -1).to(h.device)
         h = torch.cat((cls_tokens, h), dim=1)
 
         #---->Translayer x1

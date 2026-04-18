@@ -1,4 +1,6 @@
 import argparse
+import inspect
+import ast
 from pathlib import Path
 import numpy as np
 import glob
@@ -16,10 +18,28 @@ def make_parse():
     parser = argparse.ArgumentParser()
     parser.add_argument('--stage', default='train', type=str)
     parser.add_argument('--config', default='Camelyon/TransMIL.yaml',type=str)
-    parser.add_argument('--gpus', default = [2])
-    parser.add_argument('--fold', default = 0)
+    parser.add_argument('--gpus', default='0', type=str,
+                        help='GPU indices as a comma-separated string. Use "cpu" to force CPU mode.')
+    parser.add_argument('--fold', default=0, type=int)
     args = parser.parse_args()
     return args
+
+
+def parse_gpus(raw_gpus):
+    if raw_gpus is None:
+        return []
+
+    if isinstance(raw_gpus, (list, tuple)):
+        return [int(gpu) for gpu in raw_gpus]
+
+    raw_gpus = str(raw_gpus).strip()
+    if raw_gpus.lower() in {'cpu', 'none', ''}:
+        return []
+
+    if raw_gpus.startswith('['):
+        return [int(gpu) for gpu in ast.literal_eval(raw_gpus)]
+
+    return [int(gpu.strip()) for gpu in raw_gpus.split(',') if gpu.strip()]
 
 #---->main
 def main(cfg):
@@ -52,18 +72,30 @@ def main(cfg):
     model = ModelInterface(**ModelInterface_dict)
     
     #---->Instantiate Trainer
-    trainer = Trainer(
+    trainer_kwargs = dict(
         num_sanity_val_steps=0, 
         logger=cfg.load_loggers,
         callbacks=cfg.callbacks,
         max_epochs= cfg.General.epochs,
-        gpus=cfg.General.gpus,
-        amp_level=cfg.General.amp_level,  
-        precision=cfg.General.precision,  
         accumulate_grad_batches=cfg.General.grad_acc,
         deterministic=True,
         check_val_every_n_epoch=1,
     )
+    trainer_signature = inspect.signature(Trainer.__init__)
+    use_gpu = len(cfg.General.gpus) > 0
+
+    if 'accelerator' in trainer_signature.parameters and 'devices' in trainer_signature.parameters:
+        trainer_kwargs['accelerator'] = 'gpu' if use_gpu else 'cpu'
+        trainer_kwargs['devices'] = len(cfg.General.gpus) if use_gpu else 1
+        trainer_kwargs['precision'] = '16-mixed' if use_gpu and int(cfg.General.precision) == 16 else 32
+        if use_gpu and len(cfg.General.gpus) > 1 and 'strategy' in trainer_signature.parameters:
+            trainer_kwargs['strategy'] = cfg.General.multi_gpu_mode
+    else:
+        trainer_kwargs['gpus'] = cfg.General.gpus
+        trainer_kwargs['amp_level'] = cfg.General.amp_level
+        trainer_kwargs['precision'] = cfg.General.precision
+
+    trainer = Trainer(**trainer_kwargs)
 
     #---->train or test
     if cfg.General.server == 'train':
@@ -83,7 +115,7 @@ if __name__ == '__main__':
 
     #---->update
     cfg.config = args.config
-    cfg.General.gpus = args.gpus
+    cfg.General.gpus = parse_gpus(args.gpus)
     cfg.General.server = args.stage
     cfg.Data.fold = args.fold
 
