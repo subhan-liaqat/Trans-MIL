@@ -52,22 +52,18 @@ def main(cfg):
     model = ModelInterface(**ModelInterface_dict)
     
     #---->Instantiate Trainer
-    trainer_kwargs = dict(
-        num_sanity_val_steps=0,
-        logger=False if getattr(cfg.General, 'disable_loggers', False) else cfg.load_loggers,
+    trainer = Trainer(
+        num_sanity_val_steps=0, 
+        logger=cfg.load_loggers,
         callbacks=cfg.callbacks,
-        max_epochs=cfg.General.epochs,
+        max_epochs= cfg.General.epochs,
         gpus=cfg.General.gpus,
+        amp_level=cfg.General.amp_level,  
+        precision=cfg.General.precision,  
         accumulate_grad_batches=cfg.General.grad_acc,
         deterministic=True,
         check_val_every_n_epoch=1,
     )
-    # Avoid Apex-only mixed-precision settings when running in plain PyTorch/CPU environments.
-    if getattr(cfg.General, 'fp16', False):
-        trainer_kwargs['amp_level'] = cfg.General.amp_level
-        trainer_kwargs['precision'] = cfg.General.precision
-
-    trainer = Trainer(**trainer_kwargs)
 
     #---->train or test
     if cfg.General.server == 'train':

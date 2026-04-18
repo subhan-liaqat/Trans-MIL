@@ -1,9 +1,0 @@
-.venv-transmil/
-__pycache__/
-*/__pycache__/
-logs/
-tools/CLAM/
-requirements.runtime.txt
-Camelyon16/clam_results/
-datasets/
-IbotViTBaseCOADCamelyon16/pt_files/
