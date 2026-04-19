@@ -14,8 +14,6 @@ from .lovasz_loss import LovaszSoftmax
 from .ND_Crossentropy import CrossentropyND, TopKLoss, WeightedCrossEntropyLoss,\
      WeightedCrossEntropyLossV2, DisPenalizedCE
 
-from pytorch_toolbelt import losses as L
-
 def create_loss(args, w1=1.0, w2=0.5):
     conf_loss = args.base_loss
     ### MulticlassJaccardLoss(classes=np.arange(11)
@@ -24,30 +22,37 @@ def create_loss(args, w1=1.0, w2=0.5):
     if hasattr(nn, conf_loss): 
         loss = getattr(nn, conf_loss)() 
     #binary loss
-    elif conf_loss == "focal":
-        loss = L.BinaryFocalLoss()
-    elif conf_loss == "jaccard":
-        loss = L.BinaryJaccardLoss()
-    elif conf_loss == "jaccard_log":
-        loss = L.BinaryJaccardLoss()
-    elif conf_loss == "dice":
-        loss = L.BinaryDiceLoss()
-    elif conf_loss == "dice_log":
-        loss = L.BinaryDiceLogLoss()
-    elif conf_loss == "dice_log":
-        loss = L.BinaryDiceLogLoss()
-    elif conf_loss == "bce+lovasz":
-        loss = L.JointLoss(BCEWithLogitsLoss(), L.BinaryLovaszLoss(), w1, w2)
-    elif conf_loss == "lovasz":
-        loss = L.BinaryLovaszLoss()
-    elif conf_loss == "bce+jaccard":
-        loss = L.JointLoss(BCEWithLogitsLoss(), L.BinaryJaccardLoss(), w1, w2)
-    elif conf_loss == "bce+log_jaccard":
-        loss = L.JointLoss(BCEWithLogitsLoss(), L.BinaryJaccardLogLoss(), w1, w2)
-    elif conf_loss == "bce+log_dice":
-        loss = L.JointLoss(BCEWithLogitsLoss(), L.BinaryDiceLogLoss(), w1, w2)
-    elif conf_loss == "reduced_focal":
-        loss = L.BinaryFocalLoss(reduced=True)
+    elif conf_loss in {
+        "focal", "jaccard", "jaccard_log", "dice", "dice_log",
+        "bce+lovasz", "lovasz", "bce+jaccard", "bce+log_jaccard",
+        "bce+log_dice", "reduced_focal"
+    }:
+        from pytorch_toolbelt import losses as L
+
+        if conf_loss == "focal":
+            loss = L.BinaryFocalLoss()
+        elif conf_loss == "jaccard":
+            loss = L.BinaryJaccardLoss()
+        elif conf_loss == "jaccard_log":
+            loss = L.BinaryJaccardLoss()
+        elif conf_loss == "dice":
+            loss = L.BinaryDiceLoss()
+        elif conf_loss == "dice_log":
+            loss = L.BinaryDiceLogLoss()
+        elif conf_loss == "dice_log":
+            loss = L.BinaryDiceLogLoss()
+        elif conf_loss == "bce+lovasz":
+            loss = L.JointLoss(nn.BCEWithLogitsLoss(), L.BinaryLovaszLoss(), w1, w2)
+        elif conf_loss == "lovasz":
+            loss = L.BinaryLovaszLoss()
+        elif conf_loss == "bce+jaccard":
+            loss = L.JointLoss(nn.BCEWithLogitsLoss(), L.BinaryJaccardLoss(), w1, w2)
+        elif conf_loss == "bce+log_jaccard":
+            loss = L.JointLoss(nn.BCEWithLogitsLoss(), L.BinaryJaccardLogLoss(), w1, w2)
+        elif conf_loss == "bce+log_dice":
+            loss = L.JointLoss(nn.BCEWithLogitsLoss(), L.BinaryDiceLogLoss(), w1, w2)
+        elif conf_loss == "reduced_focal":
+            loss = L.BinaryFocalLoss(reduced=True)
     else:
         assert False and "Invalid loss"
         raise ValueError

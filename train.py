@@ -1,9 +1,6 @@
 import argparse
 import inspect
 import ast
-from pathlib import Path
-import numpy as np
-import glob
 
 from datasets import DataInterface
 from models import ModelInterface
@@ -40,6 +37,36 @@ def parse_gpus(raw_gpus):
         return [int(gpu) for gpu in ast.literal_eval(raw_gpus)]
 
     return [int(gpu.strip()) for gpu in raw_gpus.split(',') if gpu.strip()]
+
+
+def parse_major_minor(version_string):
+    version_parts = []
+    for chunk in str(version_string).split('.'):
+        digits = ''.join(ch for ch in chunk if ch.isdigit())
+        if not digits:
+            break
+        version_parts.append(int(digits))
+        if len(version_parts) == 2:
+            break
+
+    while len(version_parts) < 2:
+        version_parts.append(0)
+
+    return tuple(version_parts[:2])
+
+
+def resolve_precision(raw_precision, use_gpu):
+    precision = int(raw_precision)
+    if not use_gpu and precision == 16:
+        return 32
+
+    if precision != 16:
+        return precision
+
+    if parse_major_minor(pl.__version__) >= (2, 0):
+        return '16-mixed' if use_gpu else 32
+
+    return 16
 
 #---->main
 def main(cfg):
@@ -87,13 +114,13 @@ def main(cfg):
     if 'accelerator' in trainer_signature.parameters and 'devices' in trainer_signature.parameters:
         trainer_kwargs['accelerator'] = 'gpu' if use_gpu else 'cpu'
         trainer_kwargs['devices'] = len(cfg.General.gpus) if use_gpu else 1
-        trainer_kwargs['precision'] = '16-mixed' if use_gpu and int(cfg.General.precision) == 16 else 32
+        trainer_kwargs['precision'] = resolve_precision(cfg.General.precision, use_gpu)
         if use_gpu and len(cfg.General.gpus) > 1 and 'strategy' in trainer_signature.parameters:
             trainer_kwargs['strategy'] = cfg.General.multi_gpu_mode
     else:
         trainer_kwargs['gpus'] = cfg.General.gpus
         trainer_kwargs['amp_level'] = cfg.General.amp_level
-        trainer_kwargs['precision'] = cfg.General.precision
+        trainer_kwargs['precision'] = resolve_precision(cfg.General.precision, use_gpu)
 
     trainer = Trainer(**trainer_kwargs)
 
@@ -105,7 +132,11 @@ def main(cfg):
         model_paths = [str(model_path) for model_path in model_paths if 'epoch' in str(model_path)]
         for path in model_paths:
             print(path)
-            new_model = model.load_from_checkpoint(checkpoint_path=path, cfg=cfg)
+            new_model = model.load_from_checkpoint(
+                checkpoint_path=path,
+                data=cfg.Data,
+                log=cfg.log_path,
+            )
             trainer.test(model=new_model, datamodule=dm)
 
 if __name__ == '__main__':

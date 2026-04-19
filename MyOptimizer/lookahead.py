@@ -15,10 +15,11 @@ class Lookahead(Optimizer):
             raise ValueError(f'Invalid slow update rate: {alpha}')
         if not 1 <= k:
             raise ValueError(f'Invalid lookahead steps: {k}')
-        defaults = dict(lookahead_alpha=alpha, lookahead_k=k, lookahead_step=0)
         self.base_optimizer = base_optimizer
+        defaults = dict(self.base_optimizer.defaults)
+        defaults.update(dict(lookahead_alpha=alpha, lookahead_k=k, lookahead_step=0))
+        super().__init__(self.base_optimizer.param_groups, defaults)
         self.param_groups = self.base_optimizer.param_groups
-        self.defaults = base_optimizer.defaults
         self.defaults.update(defaults)
         self.state = defaultdict(dict)
         # manually add our defaults to the param groups
@@ -35,7 +36,7 @@ class Lookahead(Optimizer):
                 param_state['slow_buffer'] = torch.empty_like(fast_p.data)
                 param_state['slow_buffer'].copy_(fast_p.data)
             slow = param_state['slow_buffer']
-            slow.add_(group['lookahead_alpha'], fast_p.data - slow)
+            slow.add_(fast_p.data - slow, alpha=group['lookahead_alpha'])
             fast_p.data.copy_(slow)
 
     def sync_lookahead(self):

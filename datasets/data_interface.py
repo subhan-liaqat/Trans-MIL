@@ -1,9 +1,7 @@
 import inspect # 查看python 类的参数和模块、函数代码
 import importlib # In order to dynamically import the library
 import pytorch_lightning as pl
-from torch.utils.data import random_split, DataLoader
-from torchvision.datasets import MNIST
-from torchvision import transforms
+from torch.utils.data import DataLoader
 
 class DataInterface(pl.LightningDataModule):
 

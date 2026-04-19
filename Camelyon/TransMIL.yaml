@@ -17,7 +17,7 @@ Data:
     dataset_name: camel_data
     data_shuffle: False
     data_dir: Camelyon16/pt_files/
-    feature_exts: ['.pt', '.npy']
+    feature_exts: ['.npy']
     label_dir: dataset_csv/camelyon16/
     fold: 0
     nfold: 4

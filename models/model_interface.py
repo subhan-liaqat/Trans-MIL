@@ -1,19 +1,17 @@
-import sys
-import numpy as np
 import inspect
 import importlib
 import random
 import pandas as pd
+from pathlib import Path
 
 #---->
 from MyOptimizer import create_optimizer
 from MyLoss import create_loss
 from utils.utils import cross_entropy_torch
+from addict import Dict
 
 #---->
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from torchmetrics import MetricCollection
 from torchmetrics.classification import (
     BinaryAUROC,
@@ -41,12 +39,21 @@ class  ModelInterface(pl.LightningModule):
     #---->init
     def __init__(self, model, loss, optimizer, **kargs):
         super(ModelInterface, self).__init__()
-        self.save_hyperparameters()
+        self.model_cfg = self._ensure_config(model)
+        self.loss_cfg = self._ensure_config(loss)
+        self.optimizer_cfg = self._ensure_config(optimizer)
+        self.data_cfg = self._ensure_config(kargs['data'])
+        self.log_path = Path(kargs['log'])
+        self.save_hyperparameters({
+            'model': self._to_plain_dict(self.model_cfg),
+            'loss': self._to_plain_dict(self.loss_cfg),
+            'optimizer': self._to_plain_dict(self.optimizer_cfg),
+            'data': self._to_plain_dict(self.data_cfg),
+            'log': str(self.log_path),
+        })
         self.load_model()
-        self.loss = create_loss(loss)
-        self.optimizer = optimizer
-        self.n_classes = model.n_classes
-        self.log_path = kargs['log']
+        self.loss = create_loss(self.loss_cfg)
+        self.n_classes = self.model_cfg.n_classes
 
         #---->acc
         self.data = [{"count": 0, "correct": 0} for i in range(self.n_classes)]
@@ -76,8 +83,10 @@ class  ModelInterface(pl.LightningModule):
         self.test_metrics = metrics.clone(prefix = 'test_')
 
         #--->random
-        self.shuffle = kargs['data'].data_shuffle
+        self.shuffle = self.data_cfg.data_shuffle
         self.count = 0
+        self.validation_step_outputs = []
+        self.test_step_outputs = []
 
 
     #---->remove v_num
@@ -101,18 +110,13 @@ class  ModelInterface(pl.LightningModule):
         #---->acc log
         self._update_classwise_stats(Y_hat, label)
 
-        return {'loss': loss} 
+        return loss
 
-    def training_epoch_end(self, training_step_outputs):
-        for c in range(self.n_classes):
-            count = self.data[c]["count"]
-            correct = self.data[c]["correct"]
-            if count == 0: 
-                acc = None
-            else:
-                acc = float(correct) / count
-            print('class {}: acc {}, correct {}/{}'.format(c, acc, correct, count))
-        self.data = [{"count": 0, "correct": 0} for i in range(self.n_classes)]
+    def on_train_epoch_end(self):
+        self._log_and_reset_classwise_stats()
+
+    def on_validation_epoch_start(self):
+        self.validation_step_outputs.clear()
 
     def validation_step(self, batch, batch_idx):
         data, label = batch
@@ -125,10 +129,16 @@ class  ModelInterface(pl.LightningModule):
         #---->acc log
         self._update_classwise_stats(Y_hat, label)
 
-        return {'logits' : logits, 'Y_prob' : Y_prob, 'Y_hat' : Y_hat, 'label' : label}
+        output = {'logits' : logits, 'Y_prob' : Y_prob, 'Y_hat' : Y_hat, 'label' : label}
+        self.validation_step_outputs.append(output)
+        return output
 
 
-    def validation_epoch_end(self, val_step_outputs):
+    def on_validation_epoch_end(self):
+        val_step_outputs = self.validation_step_outputs
+        if not val_step_outputs:
+            return
+
         logits = torch.cat([x['logits'] for x in val_step_outputs], dim = 0)
         probs = torch.cat([x['Y_prob'] for x in val_step_outputs], dim = 0)
         max_probs = torch.stack([x['Y_hat'] for x in val_step_outputs])
@@ -142,27 +152,23 @@ class  ModelInterface(pl.LightningModule):
         self.log_dict(self.valid_metrics(preds, target),
                           on_epoch = True, logger = True)
 
-        #---->acc log
-        for c in range(self.n_classes):
-            count = self.data[c]["count"]
-            correct = self.data[c]["correct"]
-            if count == 0: 
-                acc = None
-            else:
-                acc = float(correct) / count
-            print('class {}: acc {}, correct {}/{}'.format(c, acc, correct, count))
-        self.data = [{"count": 0, "correct": 0} for i in range(self.n_classes)]
+        self._log_and_reset_classwise_stats()
         
         #---->random, if shuffle data, change seed
         if self.shuffle == True:
             self.count = self.count+1
             random.seed(self.count*50)
+
+        self.validation_step_outputs.clear()
     
 
 
     def configure_optimizers(self):
-        optimizer = create_optimizer(self.optimizer, self.model)
+        optimizer = create_optimizer(self.optimizer_cfg, self.model)
         return [optimizer]
+
+    def on_test_epoch_start(self):
+        self.test_step_outputs.clear()
 
     def test_step(self, batch, batch_idx):
         data, label = batch
@@ -174,9 +180,15 @@ class  ModelInterface(pl.LightningModule):
         #---->acc log
         self._update_classwise_stats(Y_hat, label)
 
-        return {'logits' : logits, 'Y_prob' : Y_prob, 'Y_hat' : Y_hat, 'label' : label}
+        output = {'logits' : logits, 'Y_prob' : Y_prob, 'Y_hat' : Y_hat, 'label' : label}
+        self.test_step_outputs.append(output)
+        return output
 
-    def test_epoch_end(self, output_results):
+    def on_test_epoch_end(self):
+        output_results = self.test_step_outputs
+        if not output_results:
+            return
+
         probs = torch.cat([x['Y_prob'] for x in output_results], dim = 0)
         max_probs = torch.stack([x['Y_hat'] for x in output_results])
         target = torch.stack([x['label'] for x in output_results], dim = 0)
@@ -191,23 +203,15 @@ class  ModelInterface(pl.LightningModule):
             print(f'{keys} = {values}')
             metrics[keys] = values.cpu().numpy()
         print()
-        #---->acc log
-        for c in range(self.n_classes):
-            count = self.data[c]["count"]
-            correct = self.data[c]["correct"]
-            if count == 0: 
-                acc = None
-            else:
-                acc = float(correct) / count
-            print('class {}: acc {}, correct {}/{}'.format(c, acc, correct, count))
-        self.data = [{"count": 0, "correct": 0} for i in range(self.n_classes)]
+        self._log_and_reset_classwise_stats()
         #---->
         result = pd.DataFrame([metrics])
         result.to_csv(self.log_path / 'result.csv')
+        self.test_step_outputs.clear()
 
 
     def load_model(self):
-        name = self.hparams.model.name
+        name = self.model_cfg.name
         # Change the `trans_unet.py` file name to `TransUnet` class name.
         # Please always name your model file name as `trans_unet.py` and
         # class name or funciton name corresponding `TransUnet`.
@@ -232,11 +236,11 @@ class  ModelInterface(pl.LightningModule):
             name for name in inspect.signature(Model.__init__).parameters
             if name != 'self'
         ]
-        inkeys = self.hparams.model.keys()
+        inkeys = self.model_cfg.keys()
         args1 = {}
         for arg in class_args:
             if arg in inkeys:
-                args1[arg] = getattr(self.hparams.model, arg)
+                args1[arg] = getattr(self.model_cfg, arg)
         args1.update(other_args)
         return Model(**args1)
 
@@ -255,3 +259,30 @@ class  ModelInterface(pl.LightningModule):
             pred = int(pred)
             self.data[label]["count"] += 1
             self.data[label]["correct"] += int(pred == label)
+
+    def _log_and_reset_classwise_stats(self):
+        for c in range(self.n_classes):
+            count = self.data[c]["count"]
+            correct = self.data[c]["correct"]
+            if count == 0:
+                acc = None
+            else:
+                acc = float(correct) / count
+            print('class {}: acc {}, correct {}/{}'.format(c, acc, correct, count))
+        self.data = [{"count": 0, "correct": 0} for i in range(self.n_classes)]
+
+    def _ensure_config(self, value):
+        if isinstance(value, Dict):
+            return value
+        if isinstance(value, dict):
+            return Dict(value)
+        return value
+
+    def _to_plain_dict(self, value):
+        if isinstance(value, Dict):
+            value = dict(value)
+        if isinstance(value, dict):
+            return {key: self._to_plain_dict(subvalue) for key, subvalue in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [self._to_plain_dict(item) for item in value]
+        return value

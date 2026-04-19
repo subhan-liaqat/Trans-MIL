@@ -45,7 +45,7 @@ class CamelData(data.Dataset):
         if feature_ext:
             return [feature_ext]
 
-        return ['.pt', '.npy']
+        return ['.npy']
 
     def _load_features(self, slide_id):
         for feature_ext in self.feature_exts:

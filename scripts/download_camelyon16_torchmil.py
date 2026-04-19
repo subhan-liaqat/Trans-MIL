@@ -178,7 +178,7 @@ def main():
 
     print()
     print('Next step:')
-    print('  py train.py --stage train --config Camelyon/TransMIL.yaml --gpus 0 --fold 0')
+    print('  python train.py --stage train --config Camelyon/TransMIL.yaml --gpus 0 --fold 0')
 
 
 if __name__ == '__main__':
