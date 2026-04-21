@@ -95,6 +95,85 @@ For Colab, the practical path is:
 
 No CLAM or raw-slide preprocessing is required for this workflow.
 
+## Extra Visualization Commands (Colab)
+
+After training, run these from the repo root.
+
+### 1) Test curves + calibration
+
+```bash
+python scripts/eval_test_and_plot.py \
+  --config Camelyon/TransMIL.yaml \
+  --ckpt logs/Camelyon/TransMIL/fold0/epoch=07-val_loss=0.4929.ckpt \
+  --fold 0 --gpus 0
+```
+
+This writes:
+- `test_roc_pr_confusion.png`
+- `test_calibration.png`
+- `test_confidence_hist.png`
+- `training_val_curves.png` (if `metrics.csv` exists)
+
+### 2) Interpretability maps (TransMIL token importance)
+
+```bash
+python scripts/visualize_transmil_interpretability.py \
+  --config Camelyon/TransMIL.yaml \
+  --ckpt logs/Camelyon/TransMIL/fold0/epoch=07-val_loss=0.4929.ckpt \
+  --fold 0 --gpus 0 \
+  --max-slides 20 --target-class 1
+```
+
+Writes per-slide:
+- token importance vectors (`*_token_importance.npy`)
+- square-grid heatmaps (`*_grid_heatmap.png`)
+- summary table (`interpretability_summary.csv`)
+
+### 3) Optional coordinate heatmaps
+
+If you have token coordinates saved as `Camelyon16/coords/<slide_id>.npy` with shape `[n_tokens, 2]`:
+
+```bash
+python scripts/visualize_transmil_interpretability.py \
+  --config Camelyon/TransMIL.yaml \
+  --ckpt logs/Camelyon/TransMIL/fold0/epoch=07-val_loss=0.4929.ckpt \
+  --fold 0 --gpus 0 \
+  --coords-dir Camelyon16/coords
+```
+
+### 4) Optional top-k patch gallery
+
+If you have patch image paths, create a CSV (for example `Camelyon16/patch_manifest.csv`) with columns:
+- `slide_id`
+- `patch_index`
+- `image_path`
+
+Then run:
+
+```bash
+python scripts/visualize_transmil_interpretability.py \
+  --config Camelyon/TransMIL.yaml \
+  --ckpt logs/Camelyon/TransMIL/fold0/epoch=07-val_loss=0.4929.ckpt \
+  --fold 0 --gpus 0 \
+  --patch-manifest Camelyon16/patch_manifest.csv \
+  --top-k 16
+```
+
+### 5) Ablation and convergence comparison plots
+
+Prepare:
+- an ablation CSV with at least `experiment,auc` (optional `dataset,params_m`)
+- one or more Lightning `metrics.csv` files from different methods/runs
+
+```bash
+python scripts/plot_ablation_and_convergence.py \
+  --ablation-csv your_ablation_results.csv \
+  --metrics-csvs path/to/transmil/metrics.csv path/to/baseline/metrics.csv \
+  --metrics-labels TransMIL Baseline \
+  --metric-name auc \
+  --out-dir plots
+```
+
 ## Feature Dimensionality
 
 This repo now exposes `Model.in_dim` in the YAML config.

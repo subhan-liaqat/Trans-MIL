@@ -45,9 +45,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.calibration import calibration_curve
 from sklearn.metrics import (
     auc as sk_auc,
     average_precision_score,
+    brier_score_loss,
     confusion_matrix,
     precision_recall_curve,
     roc_curve,
@@ -203,6 +205,8 @@ def main():
 
     y_hat = (s >= 0.5).astype(int)
     cm = confusion_matrix(y, y_hat)
+    brier = brier_score_loss(y, s)
+    frac_pos, mean_pred = calibration_curve(y, s, n_bins=10, strategy='uniform')
 
     fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
 
@@ -240,6 +244,35 @@ def main():
     plt.close(fig)
     print(f'Wrote {fig_path}')
 
+    # Reliability / calibration plot
+    fig_cal, ax_cal = plt.subplots(figsize=(5.6, 4.4))
+    ax_cal.plot([0, 1], [0, 1], 'k--', lw=1, label='Perfect calibration')
+    ax_cal.plot(mean_pred, frac_pos, marker='o', lw=2, label=f'Model (Brier={brier:.4f})')
+    ax_cal.set_xlim(0, 1)
+    ax_cal.set_ylim(0, 1)
+    ax_cal.set_xlabel('Mean predicted probability')
+    ax_cal.set_ylabel('Fraction of positives')
+    ax_cal.set_title('Reliability diagram (test)')
+    ax_cal.legend(loc='upper left')
+    fig_cal.tight_layout()
+    cal_path = out_dir / 'test_calibration.png'
+    fig_cal.savefig(cal_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_cal)
+    print(f'Wrote {cal_path}')
+
+    # Confidence histogram
+    fig_hist, ax_hist = plt.subplots(figsize=(5.6, 4.4))
+    ax_hist.hist(s, bins=20, alpha=0.75, color='tab:blue', edgecolor='black')
+    ax_hist.set_xlim(0, 1)
+    ax_hist.set_xlabel('Predicted positive probability')
+    ax_hist.set_ylabel('Slide count')
+    ax_hist.set_title('Confidence distribution (test)')
+    fig_hist.tight_layout()
+    hist_path = out_dir / 'test_confidence_hist.png'
+    fig_hist.savefig(hist_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_hist)
+    print(f'Wrote {hist_path}')
+
     metrics_files = find_metrics_csv(log_path)
     if metrics_files:
         curves_path = out_dir / 'training_val_curves.png'
@@ -254,6 +287,8 @@ def main():
     print('Absolute paths (use with IPython.display.Image in Colab):')
     print(f'  {pred_csv.resolve()}')
     print(f'  {fig_path.resolve()}')
+    print(f'  {cal_path.resolve()}')
+    print(f'  {hist_path.resolve()}')
     curves_png = out_dir / 'training_val_curves.png'
     if curves_png.is_file():
         print(f'  {curves_png.resolve()}')

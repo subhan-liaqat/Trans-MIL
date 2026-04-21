@@ -82,6 +82,49 @@ See [docs/CAMELYON16_PIPELINE.md](docs/CAMELYON16_PIPELINE.md) for:
 - the exact `torchmil`-based training flow
 - Colab-specific notes
 
+## Additional Visualizations
+
+You can now generate paper-style extra plots beyond ROC/PR:
+
+- reliability diagram + confidence histogram (added to `scripts/eval_test_and_plot.py`)
+- token-importance heatmaps per slide (`scripts/visualize_transmil_interpretability.py`)
+- optional coordinate heatmaps (if token XY coordinates are available)
+- optional top-k patch galleries (if a patch manifest CSV is available)
+- ablation/convergence comparison figures (`scripts/plot_ablation_and_convergence.py`)
+
+### Colab commands
+
+```bash
+# 1) Standard evaluation plots + calibration plots
+python scripts/eval_test_and_plot.py \
+  --config Camelyon/TransMIL.yaml \
+  --ckpt logs/Camelyon/TransMIL/fold0/epoch=07-val_loss=0.4929.ckpt \
+  --fold 0 --gpus 0
+
+# 2) Interpretability plots (token heatmaps)
+python scripts/visualize_transmil_interpretability.py \
+  --config Camelyon/TransMIL.yaml \
+  --ckpt logs/Camelyon/TransMIL/fold0/epoch=07-val_loss=0.4929.ckpt \
+  --fold 0 --gpus 0 \
+  --max-slides 20 --target-class 1
+
+# 3) Optional: add coordinate heatmaps if you have per-slide coords as .npy [n_tokens,2]
+python scripts/visualize_transmil_interpretability.py \
+  --config Camelyon/TransMIL.yaml \
+  --ckpt logs/Camelyon/TransMIL/fold0/epoch=07-val_loss=0.4929.ckpt \
+  --fold 0 --gpus 0 \
+  --coords-dir Camelyon16/coords
+
+# 4) Optional: add top-k patch gallery if you have a manifest CSV
+# manifest columns: slide_id,patch_index,image_path
+python scripts/visualize_transmil_interpretability.py \
+  --config Camelyon/TransMIL.yaml \
+  --ckpt logs/Camelyon/TransMIL/fold0/epoch=07-val_loss=0.4929.ckpt \
+  --fold 0 --gpus 0 \
+  --patch-manifest Camelyon16/patch_manifest.csv \
+  --top-k 16
+```
+
 ## Citation
 
 ```tex
