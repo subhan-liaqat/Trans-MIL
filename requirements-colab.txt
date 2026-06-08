@@ -1,0 +1,14 @@
+# Colab-friendly deps (torch/numpy are already provided by the Colab runtime)
+addict>=2.4.0
+albumentations>=1.4.0
+einops>=0.8.0
+matplotlib>=3.8.0
+nystrom-attention>=0.0.14
+omegaconf>=2.3.0
+opencv-python-headless>=4.10.0
+pandas>=2.2.0
+Pillow>=10.3.0
+pytorch-lightning==1.9.5
+PyYAML>=6.0.0
+scikit-learn>=1.4.0
+torchmetrics>=1.3.0

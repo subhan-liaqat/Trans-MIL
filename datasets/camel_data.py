@@ -64,7 +64,7 @@ class CamelData(data.Dataset):
 
         val_ratio = float(getattr(self.dataset_cfg, 'val_ratio', 0.1))
         split_seed = int(getattr(self.dataset_cfg, 'split_seed', 2021))
-        train_bags = train_df[bag_col].astype(str).tolist()
+        train_bags = [self._normalize_bag_name(name) for name in train_df[bag_col].tolist()]
 
         rng = np.random.RandomState(split_seed)
         perm = rng.permutation(len(train_bags))
@@ -74,7 +74,7 @@ class CamelData(data.Dataset):
         partition = {
             'train': [train_bags[i] for i in range(len(train_bags)) if i not in val_idx],
             'val': [train_bags[i] for i in range(len(train_bags)) if i in val_idx],
-            'test': test_df[bag_col].astype(str).tolist(),
+            'test': [self._normalize_bag_name(name) for name in test_df[bag_col].tolist()],
         }
 
         if state not in partition:
@@ -84,6 +84,12 @@ class CamelData(data.Dataset):
         labels = [self._load_bag_label(bag_name) for bag_name in bag_names]
         self.data = pd.Series(bag_names, dtype=object)
         self.label = pd.Series(labels, dtype=int)
+
+    def _normalize_bag_name(self, bag_name):
+        bag_name = str(bag_name).strip()
+        if bag_name.lower().endswith('.npy'):
+            bag_name = bag_name[:-4]
+        return bag_name
 
     def _resolve_torchmil_columns(self, splits_df):
         normalized = {str(col).strip().lower(): col for col in splits_df.columns}

@@ -16,10 +16,10 @@ General:
 Data:
     dataset_name: camel_data
     split_format: torchmil
-    splits_csv: /content/drive/MyDrive/REPLACE_ME/splits.csv
-    data_dir: /content/drive/MyDrive/REPLACE_ME/features_resnet50
-    coords_dir: /content/drive/MyDrive/REPLACE_ME/coords
-    labels_dir: /content/drive/MyDrive/REPLACE_ME/labels
+    splits_csv: /content/drive/MyDrive/CPath_Research/CAMELYON16_Dataset/splits.csv
+    data_dir: /content/drive/MyDrive/CPath_Research/CAMELYON16_Dataset/features_resnet50
+    coords_dir: /content/drive/MyDrive/CPath_Research/CAMELYON16_Dataset/coords
+    labels_dir: /content/drive/MyDrive/CPath_Research/CAMELYON16_Dataset/labels
     patch_size: 512
     val_ratio: 0.1
     split_seed: 2021
@@ -30,11 +30,11 @@ Data:
 
     train_dataloader:
         batch_size: 1
-        num_workers: 2
+        num_workers: 0
 
     test_dataloader:
         batch_size: 1
-        num_workers: 2
+        num_workers: 0
 
 Model:
     name: TransMIL
