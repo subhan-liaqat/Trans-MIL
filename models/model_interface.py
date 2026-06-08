@@ -96,10 +96,19 @@ class  ModelInterface(pl.LightningModule):
         items.pop("v_num", None)
         return items
 
+    def _unpack_batch(self, batch):
+        if len(batch) == 3:
+            data, coords, label = batch
+            if coords is not None and coords.numel() == 0:
+                coords = None
+            return data, coords, label
+        data, label = batch
+        return data, None, label
+
     def training_step(self, batch, batch_idx):
         #---->inference
-        data, label = batch
-        results_dict = self.model(data=data, label=label)
+        data, coords, label = self._unpack_batch(batch)
+        results_dict = self.model(data=data, coords=coords, label=label)
         logits = results_dict['logits']
         Y_prob = results_dict['Y_prob']
         Y_hat = results_dict['Y_hat']
@@ -119,8 +128,8 @@ class  ModelInterface(pl.LightningModule):
         self.validation_step_outputs.clear()
 
     def validation_step(self, batch, batch_idx):
-        data, label = batch
-        results_dict = self.model(data=data, label=label)
+        data, coords, label = self._unpack_batch(batch)
+        results_dict = self.model(data=data, coords=coords, label=label)
         logits = results_dict['logits']
         Y_prob = results_dict['Y_prob']
         Y_hat = results_dict['Y_hat']
@@ -171,8 +180,8 @@ class  ModelInterface(pl.LightningModule):
         self.test_step_outputs.clear()
 
     def test_step(self, batch, batch_idx):
-        data, label = batch
-        results_dict = self.model(data=data, label=label)
+        data, coords, label = self._unpack_batch(batch)
+        results_dict = self.model(data=data, coords=coords, label=label)
         logits = results_dict['logits']
         Y_prob = results_dict['Y_prob']
         Y_hat = results_dict['Y_hat']

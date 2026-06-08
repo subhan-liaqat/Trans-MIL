@@ -84,10 +84,18 @@ def normalize_scores(scores: np.ndarray) -> np.ndarray:
     return (scores - min_v) / (max_v - min_v)
 
 
-def compute_token_importance(model, features: torch.Tensor, target_class: int) -> np.ndarray:
+def compute_token_importance(
+    model,
+    features: torch.Tensor,
+    target_class: int,
+    coords: torch.Tensor | None = None,
+) -> np.ndarray:
     model.zero_grad(set_to_none=True)
     x = features.clone().detach().requires_grad_(True)
-    out = model.model(data=x)
+    model_kwargs = {'data': x}
+    if coords is not None:
+        model_kwargs['coords'] = coords
+    out = model.model(**model_kwargs)
     logits = out["logits"]
     if target_class < 0 or target_class >= logits.shape[1]:
         raise ValueError(f"target-class must be in [0, {logits.shape[1] - 1}]")
@@ -219,11 +227,12 @@ def main():
     for idx in range(max_slides):
         slide_id = str(ds.data.iloc[idx])
         label = int(ds.label.iloc[idx])
-        features, _ = ds[idx]
+        features, coords, _ = ds[idx]
+        coords = coords.unsqueeze(0).to(device) if coords.numel() > 0 else None
         x = features.unsqueeze(0).to(device)
 
         with torch.enable_grad():
-            scores = compute_token_importance(model, x, args.target_class)
+            scores = compute_token_importance(model, x, args.target_class, coords=coords)
 
         npy_path = out_dir / f"{slide_id}_token_importance.npy"
         np.save(npy_path, scores)

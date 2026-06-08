@@ -4,6 +4,8 @@ import torch.nn.functional as F
 import numpy as np
 from nystrom_attention import NystromAttention
 
+from utils.hilbert_sort import hilbert_sort_features
+
 
 class TransLayer(nn.Module):
 
@@ -26,27 +28,10 @@ class TransLayer(nn.Module):
         return x
 
 
-class PPEG(nn.Module):
-    def __init__(self, dim=512):
-        super(PPEG, self).__init__()
-        self.proj = nn.Conv2d(dim, dim, 7, 1, 7//2, groups=dim)
-        self.proj1 = nn.Conv2d(dim, dim, 5, 1, 5//2, groups=dim)
-        self.proj2 = nn.Conv2d(dim, dim, 3, 1, 3//2, groups=dim)
-
-    def forward(self, x, H, W):
-        B, _, C = x.shape
-        cls_token, feat_token = x[:, 0], x[:, 1:]
-        cnn_feat = feat_token.transpose(1, 2).view(B, C, H, W)
-        x = self.proj(cnn_feat)+cnn_feat+self.proj1(cnn_feat)+self.proj2(cnn_feat)
-        x = x.flatten(2).transpose(1, 2)
-        x = torch.cat((cls_token.unsqueeze(1), x), dim=1)
-        return x
-
-
 class TransMIL(nn.Module):
-    def __init__(self, n_classes, in_dim=1024, hidden_dim=512):
+    def __init__(self, n_classes, in_dim=1024, hidden_dim=512, patch_size=512):
         super(TransMIL, self).__init__()
-        self.pos_layer = PPEG(dim=hidden_dim)
+        self.patch_size = patch_size
         self._fc1 = nn.Sequential(nn.Linear(in_dim, hidden_dim), nn.ReLU())
         self.cls_token = nn.Parameter(torch.randn(1, 1, hidden_dim))
         self.n_classes = n_classes
@@ -59,9 +44,13 @@ class TransMIL(nn.Module):
     def forward(self, **kwargs):
 
         h = kwargs['data'].float() #[B, n, 1024]
-        
+        coords = kwargs.get('coords', None)
+
         h = self._fc1(h) #[B, n, 512]
-        
+
+        #---->Hilbert sort (replaces PPEG spatial encoding)
+        h = hilbert_sort_features(h, coords=coords, patch_size=self.patch_size)
+
         #---->pad
         H = h.shape[1]
         _H, _W = int(np.ceil(np.sqrt(H))), int(np.ceil(np.sqrt(H)))
@@ -76,9 +65,6 @@ class TransMIL(nn.Module):
         #---->Translayer x1
         h = self.layer1(h) #[B, N, 512]
 
-        #---->PPEG
-        h = self.pos_layer(h, _H, _W) #[B, N, 512]
-        
         #---->Translayer x2
         h = self.layer2(h) #[B, N, 512]
 

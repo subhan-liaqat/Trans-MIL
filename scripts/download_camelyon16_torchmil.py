@@ -28,6 +28,11 @@ SPLITS_URL = (
     'dataset/splits.csv?download=true'
 )
 
+COORDS_URL = (
+    'https://huggingface.co/datasets/torchmil/Camelyon16_MIL/resolve/main/'
+    'dataset/patches_512/coords.tar.gz?download=true'
+)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -69,6 +74,17 @@ def parse_args():
         '--download-splits',
         action='store_true',
         help='Also download torchmil splits.csv for reference.',
+    )
+    parser.add_argument(
+        '--skip-coords',
+        action='store_true',
+        help='Skip downloading patch coordinate files (coords are downloaded by default).',
+    )
+    parser.add_argument(
+        '--coords-dir',
+        default=None,
+        type=Path,
+        help='Directory where extracted coordinate .npy files should be stored.',
     )
     return parser.parse_args()
 
@@ -154,6 +170,15 @@ def maybe_download_splits(repo_root):
     print(f'Saved reference split file to {splits_path}')
 
 
+def maybe_download_coords(repo_root, archive_dir, coords_dir, force_download=False, keep_archive=False):
+    archive_path = archive_dir / 'camelyon16_coords.tar.gz'
+    archive_path = download_file(COORDS_URL, archive_path, force_download=force_download)
+    extract_npy_members(archive_path, coords_dir)
+    if not keep_archive:
+        archive_path.unlink(missing_ok=True)
+        print(f'Removed cached archive: {archive_path}')
+
+
 def main():
     args = parse_args()
     repo_root = args.repo_root.resolve()
@@ -171,6 +196,16 @@ def main():
 
     if args.download_splits:
         maybe_download_splits(repo_root)
+
+    if not args.skip_coords:
+        coords_dir = (args.coords_dir or repo_root / 'Camelyon16' / 'coords').resolve()
+        maybe_download_coords(
+            repo_root,
+            archive_dir,
+            coords_dir,
+            force_download=args.force_download,
+            keep_archive=args.keep_archive,
+        )
 
     if not args.keep_archive:
         archive_path.unlink(missing_ok=True)

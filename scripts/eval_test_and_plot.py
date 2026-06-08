@@ -178,9 +178,12 @@ def main():
         for idx in range(len(test_ds)):
             slide_id = str(test_ds.data.iloc[idx])
             label = int(test_ds.label.iloc[idx])
-            features, _ = test_ds[idx]
+            features, coords, _ = test_ds[idx]
             features = features.unsqueeze(0).to(device)
-            out = model.model(data=features)
+            model_kwargs = {'data': features}
+            if coords.numel() > 0:
+                model_kwargs['coords'] = coords.unsqueeze(0).to(device)
+            out = model.model(**model_kwargs)
             probs = out['Y_prob'].squeeze(0).detach().float().cpu().numpy()
             score = float(probs[pos_idx])
 
